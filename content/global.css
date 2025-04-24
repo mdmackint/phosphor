@@ -1,0 +1,94 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+@keyframes blur-in {
+    0% {
+        filter: blur(1rem) saturate(0%) opacity(0.7);
+        transform-origin: center;
+        transform: scale(0.9);
+    }
+    25% {
+        transform: scale(1);
+        filter: blur(0.85rem) saturate(15%) opacity(0.8);
+    }
+    50% {
+        filter: blur(0.5rem) saturate(50%) opacity(0.9);
+    }
+    100% {
+        filter: blur(0) saturate(100%) opacity(1);
+    }
+}
+
+html {
+    background-color: rgb(34, 18, 39);
+    padding: 0 2rem;
+}
+
+body {
+    max-width: min(30rem, 90vw);
+    font-family: 'Space Mono', 'Courier New', Courier, monospace, system-ui;
+    margin: 2rem auto;
+    background-color: rgb(45, 23, 51);
+    border-radius: 1rem;
+    font-weight: 400;
+    box-shadow: 0px 0px 10px #e88cff;
+    color: rgb(231, 215, 250);
+    padding: 1.5rem 2rem;
+}
+
+h1 {
+    font-family: 'Space Mono', 'Courier New', Courier, monospace, system-ui;
+    font-weight: 700;
+    color: rgb(247, 239, 255);
+}
+
+h2 {
+    font-family: 'Space Mono', 'Courier New', Courier, monospace, system-ui;
+    font-weight: 400;
+    font-style: italic;
+    color:rgb(247, 239, 255);
+}
+
+p {
+    text-align: left;
+}
+
+.it {
+    font-style: italic;
+}
+
+input {
+    height: 2rem;
+    border-radius: 0.3rem;
+    outline: rgb(44, 21, 51);
+    color:rgb(44, 21, 51);
+    border: solid rgb(44, 21, 51) 2px;
+    padding-left: 1rem;
+    width: 80%;
+}
+
+#history {
+    background-color:rgb(51, 22, 59);
+    border: dashed rgb(45, 23, 51) 2px;
+    min-height: 5rem;
+    margin-top: 2rem;
+}
+
+.centre {
+    text-align: center;
+}
+
+#history-placeholder {
+    height: max-content;
+    padding: 1.5rem 0 0 0;
+    color:rgb(223, 202, 248);
+    width: 100%;
+    display: inline-block;
+}
+
+a:visited {
+    color:rgb(202, 248, 238)
+}
+
+a {
+    color: rgb(223, 202, 248)
+}
