@@ -1,3 +1,8 @@
+# Ignore csv files (they may be catalogues)
 *.csv
+
+# Ignore compiled binary
 phosphor
+
+# Ignore folder catalogues/ so it can be used to place catalogues
 catalogues/
