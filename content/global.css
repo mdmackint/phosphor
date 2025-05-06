@@ -66,15 +66,22 @@ p {
     font-style: italic;
 }
 
-input {
+input, select {
     height: 2rem;
     border-radius: 0.6rem;
     outline: rgb(44, 21, 51);
     color:rgb(44, 21, 51);
     border: solid rgb(44, 21, 51) 2px;
     padding-left: 1rem;
-    width: 80%;
     box-shadow: 0px 0px 5px rgb(231, 215, 250);
+}
+
+input {
+    width: 60%;
+}
+
+select {
+    width: min-content;
 }
 
 #history {
@@ -97,11 +104,12 @@ input {
 }
 
 a:visited {
-    color:rgb(202, 248, 238)
+    color: rgb(223, 202, 248);
 }
 
 a {
-    color: rgb(223, 202, 248)
+    color: rgb(223, 202, 248);
+    text-decoration: none;
 }
 
 #results {

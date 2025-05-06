@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -16,12 +17,20 @@ var emptyQueryResult result
 var headers map[string]int
 type result map[string]string
 var catPath *string
+var debug bool
 
 func init() {
+	// flags
 	catPath = flag.String("cat","catalogue.csv","specify path to catalogue csv file")
+	cc := flag.Int("cache", 5000, "set maximum cache capacity")
+	d := flag.Bool("debug", false, "show additional debug info")
 	if !flag.Parsed() {
 		flag.Parse()
 	}
+	debug = *d
+	debugPrint("debug logging enabled")
+	cacheCapacity = *cc
+	// load catalogue
 	f, err := os.Open(*catPath)
 	if err != nil {
 		log.Fatalf("failed to open catalogue file %s with error\n%s",*catPath,err.Error())
@@ -36,6 +45,7 @@ func init() {
 	if err != nil {
 		log.Fatalln("failed to read catalogue csv - is it valid?")
 	}
+	// create header references
 	headerRow := catalogue[0]
 	headers = make(map[string]int)
 	headers["title"] = slices.Index(headerRow, "title")
@@ -43,9 +53,11 @@ func init() {
 	headers["date"] = slices.Index(headerRow,"publish_date")
 	headers["tags"] = slices.Index(headerRow,"tags")
 	headers["pages"] = slices.Index(headerRow,"length")
+	headers["description"] = slices.Index(headerRow, "description")
+	headers["copies"] = slices.Index(headerRow,"copies")
 	for key, val := range headers {
 		if val == -1 {
-			log.Fatalf("didn't find required key %s in csv header",key)
+			log.Fatalf("didn't find required key \"%s\" in csv header",key)
 		}
 	}
 	noMatchResult = make(result)
@@ -54,6 +66,7 @@ func init() {
 	noMatchResult["date"] = ""
 	noMatchResult["tags"] = ""
 	noMatchResult["pages"] = ""
+	noMatchResult["special"] = "1"
 
 	emptyQueryResult = make(result)
 	emptyQueryResult["title"] = "Empty Query"
@@ -61,9 +74,11 @@ func init() {
 	emptyQueryResult["date"] = ""
 	emptyQueryResult["tags"] = ""
 	emptyQueryResult["pages"] = ""
+	emptyQueryResult["special"] = "1"
 }
 
-func find(q string) []result {
+func find(q string, mode int) []result {
+	debugPrint("find() called - got mode", mode, "and query", q)
 	if q == "" {
 		return []result{emptyQueryResult}
 	}
@@ -79,7 +94,18 @@ func find(q string) []result {
 		keywords := strings.Split(q, " ")
 		m := 0
 		for _, item := range keywords {
-			if matches(title, item) || matches(authors, item) || matches(tags, item) {
+			switch {
+			case mode == 0 && matchesAny(item, title, authors, tags):
+				debugPrint("mode 0 match")
+				m++
+			case mode == 1 && matches(title, item):
+				debugPrint("mode 1 match")
+				m++
+			case mode == 2 && matches(authors, item):
+				debugPrint("mode 2 match")
+				m++
+			case mode == 3 && matches(tags, item):
+				debugPrint("mode 3 match")
 				m++
 			}
 		}
@@ -90,6 +116,8 @@ func find(q string) []result {
 			new["date"] = row[headers["date"]]
 			new["tags"] = tags
 			new["pages"] = pages
+			// -1 for the header row
+			new["index"] = strconv.Itoa(index - 1)
 			results = append(results, new)
 		}
 	}
@@ -100,6 +128,21 @@ func find(q string) []result {
 	return results
 }
 
-func matches(title, query string) bool {
-	return strings.Contains(strings.ToLower(title),strings.ToLower(query))
+func matches(metadata, query string) bool {
+	return strings.Contains(strings.ToLower(metadata),strings.ToLower(query))
+}
+
+func matchesAny(query string, metadatas ...string) bool {
+	for _, metadata := range metadatas {
+		if strings.Contains(strings.ToLower(metadata),strings.ToLower(query)) {
+			return true
+		}
+	}
+	return false
+}
+
+func debugPrint(a ...any) {
+	if debug {
+		log.Println(a...)
+	}
 }

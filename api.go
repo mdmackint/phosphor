@@ -6,6 +6,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,25 +17,58 @@ import (
 type cacheItem struct {
 	Res   []result
 	Query string
+	Mode  int
 }
 
 //go:embed internal
 var internals embed.FS
 var cache []cacheItem
-
-// Change this to suit your requirements
 var cacheCapacity int = 5000
+var genericErrorPage string
+var errorPages map[int][]byte
+
+func newErrorPage(code int, details string) (page []byte) {
+	str := genericErrorPage
+	str = strings.ReplaceAll(str,"{ code }", fmt.Sprintf("%d - %s",code,http.StatusText(code)))
+	str = strings.ReplaceAll(str,"{ details }",details)
+	page = []byte(str)
+	return
+}
 
 func init() {
+	// make cache
 	cache = make([]cacheItem, 0, cacheCapacity)
+
+	// make errorPages map
+	errorPages = make(map[int][]byte)
+	// load generic error page
+	errorPageBytes, err := internals.ReadFile("internal/error.html")
+	if err != nil {
+		log.Fatalln("unable to read file internal/error.html\n", err.Error())
+	}
+	genericErrorPage = string(errorPageBytes)
+
+	// create error pages
+	errorPages[http.StatusNotFound] = newErrorPage(http.StatusNotFound, "This page wasn't found. Please ensure that you entered a valid path.")
+	errorPages[http.StatusInternalServerError] = newErrorPage(
+		http.StatusInternalServerError,
+		"The server experienced an internal error while trying to handle your request. This is likely temporary, and is not a problem with your computer.",
+	)
+	errorPages[http.StatusBadRequest] = newErrorPage(
+		http.StatusBadRequest,
+		"You've performed a malformed request. Please ensure any form data is entered correctly.",
+	)
 }
 
 func api(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
-	case "/api/search", "api/search":
-		searchHandler(w,r)
+	case "/dynamic/search", "dynamic/search":
+		searchHandler(w, r)
+	case "/dynamic/details", "dynamic/details":
+		detailsHandler(w, r)
 	default:
 		w.WriteHeader(http.StatusNotFound)
+		w.Write(errorPages[http.StatusNotFound])
 		return
 	}
 }
@@ -42,22 +76,35 @@ func api(w http.ResponseWriter, r *http.Request) {
 func searchHandler(w http.ResponseWriter, r *http.Request) {
 	// get data from post request, log it, then search the db
 	search := r.FormValue("enquiry")
+	var mode int
+	switch r.FormValue("fields") {
+	case "all", "":
+		mode = 0
+	case "title":
+		mode = 1
+	case "creator":
+		mode = 2
+	case "tags":
+		mode = 3
+	default:
+		mode = 0
+	}
 	log.Printf("new api request from ip %s", r.RemoteAddr)
 	start := time.Now()
 	var res []result
 	if len(cache) > 0 {
 		for _, item := range cache {
-			if item.Query == strings.Trim(search, " ") {
+			if item.Query == strings.Trim(search, " ") && item.Mode == mode {
 				res = item.Res
-				log.Printf("cache used for query \"%s\"", html.EscapeString(search))
+				log.Printf("cache used for query \"%s\"", clean(search))
 				break
 			}
 		}
 		if res == nil {
-			res = find(search)
+			res = find(search, mode)
 			switch {
 			case len(cache) < cacheCapacity:
-				cache = append(cache, cacheItem{Res: res, Query: strings.Trim(search, " ")})
+				cache = append(cache, cacheItem{Res: res, Query: strings.Trim(search, " "), Mode: mode})
 				log.Println("cache appended")
 			case len(cache) >= cacheCapacity:
 				cache = make([]cacheItem, 0, cacheCapacity)
@@ -65,25 +112,34 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		res = find(search)
-		cache = append(cache, cacheItem{Res: res, Query: strings.Trim(search, " ")})
+		res = find(search, mode)
+		cache = append(cache, cacheItem{Res: res, Query: strings.Trim(search, " "), Mode: mode})
 		log.Println("cache appended")
 	}
 	dur := time.Since(start)
-	log.Printf("got %d results", len(res))
+	if len(res) == 1 && res[0]["special"] == "1" {
+		log.Println("got either no results or an invalid query")
+	} else {
+		log.Printf("got %d results", len(res))
+	}
 
 	// read the html file, respond with HTTP 500 if file fails to load
 	respBytes, err := internals.ReadFile("internal/apireturn.html")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(errorPages[http.StatusInternalServerError])
 		return
 	}
 	resp := string(respBytes)
 
 	// write list items to string
 	lis := ""
+
+	// there should always be at least 1 result, because if nothing is found
+	// then find() returns "no results" as a result
 	if len(res) == 0 {
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(errorPages[http.StatusInternalServerError])
 		return
 	}
 	for _, item := range res {
@@ -99,35 +155,134 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	resp = strings.ReplaceAll(resp, "{ dur }", p.Sprintf("%dμs", dur.Microseconds()))
 
 	// write response
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write([]byte(resp))
 	if err != nil {
 		log.Println("Failed to write bytes in request!")
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(errorPages[http.StatusInternalServerError])
 		return
 	}
+	return
+}
+
+func detailsHandler(w http.ResponseWriter, r *http.Request) {
+	// get index to lookup from form value
+	indexValue := r.FormValue("i")
+
+	// check for blank index, and redirect user home
+	if indexValue == "" {
+		w.Header().Add("Location", "/")
+		w.WriteHeader(http.StatusSeeOther)
+		return
+	}
+
+	// convert index to integer
+	var (
+		index int
+		err error
+	)
+	if index, err = strconv.Atoi(indexValue); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(errorPages[http.StatusBadRequest])
+		return
+	}
+
+	// get details page
+	page, err := internals.ReadFile("internal/details.html")
+	if err != nil {
+		log.Printf("couldn't read details page! returning http 500. error:\n%s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(errorPages[http.StatusInternalServerError])
+		return
+	}
+	
+	// get catalogue entry
+	var entry result = make(result, 6)
+	// adding 1 to index because of header row
+	index++
+	// ensure there isn't a reference error.
+	// it's not a mistake that it's checking if index < 1 and not < 0
+	// because we don't want the header row to be returned
+	if index >= len(catalogue) || index < 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(errorPages[http.StatusBadRequest])
+		return
+	}
+	// fetch details of entry
+	entry["title"] = catalogue[index][headers["title"]]
+	entry["creators"] = catalogue[index][headers["creators"]]
+	entry["description"] = catalogue[index][headers["description"]]
+	entry["date"] = catalogue[index][headers["date"]]
+	entry["pages"] = catalogue[index][headers["pages"]]
+	entry["tags"] = catalogue[index][headers["tags"]]
+	entry["copies"] = catalogue[index][headers["copies"]]
+	debugPrint("details of item", entry["title"], "viewed")
+	pageStr := string(page)
+	pageStr = strings.ReplaceAll(pageStr,"{ title }", entry["title"])
+	// remove placeholders of empty values
+	for i := range 4 {
+		key := ""
+		placeholder := ""
+		switch i {
+		case 0: key = "creators"; placeholder = "{ author }"
+		case 1: key = "date"; placeholder = "{ date }"
+		case 2: key = "tags"; placeholder = "{ tags }"
+		case 3: key = "description"; placeholder = "{ desc }"
+		}
+		if len(strings.TrimSpace(entry[key])) == 0 {
+			pageStr = strings.ReplaceAll(pageStr, placeholder, "")
+		}
+	}
+	pageStr = strings.ReplaceAll(pageStr, "{ author }", fmt.Sprintf("by <b>%s</b>",clean(entry["creators"])))
+	pageStr = strings.ReplaceAll(pageStr, "{ date }", fmt.Sprintf("<br>published %s", clean(entry["date"])))
+	pageStr = strings.ReplaceAll(pageStr, "{ tags }", fmt.Sprintf("<br>tagged with %s", clean(entry["tags"])))
+	pageStr = strings.ReplaceAll(pageStr, "{ desc }", fmt.Sprintf("<br>Description:<br><blockquote>%s</blockquote>",clean(entry["description"])))
+	var copiesStr string
+	switch entry["copies"] {
+	case "1":
+		copiesStr = "1 copy"
+	default:
+		copiesStr = clean(entry["copies"]) + " copies"
+	}
+	pageStr = strings.ReplaceAll(pageStr, "{ copy }", fmt.Sprintf("<br>%s",copiesStr))
+	w.WriteHeader(200)
+	w.Write([]byte(pageStr))
 	return
 }
 
 // create list element from result
 func newLi(r result) (li string) {
 	li = "<li><b>{t}</b><br><i>{a}{d}{tags}{pages}</i></li>"
-	li = strings.ReplaceAll(li, "{t}", html.EscapeString(html.UnescapeString(r["title"])))
-	li = strings.ReplaceAll(li, "{a}", html.EscapeString(html.UnescapeString(r["creators"])))
-	if len(r["date"]) != 0 {
-		li = strings.ReplaceAll(li, "{d}", "<br>Published "+html.EscapeString(html.UnescapeString(r["date"])))
+	index, err := strconv.Atoi(r["index"])
+	var title string
+	if err != nil {
+		title = clean(r["title"])
 	} else {
-		li = strings.ReplaceAll(li, "{d}", "")
+		title = fmt.Sprintf("<a href=\"/dynamic/details?i=%d\">%s</a>", index, clean(r["title"]))
 	}
-	if len(r["tags"]) == 0 {
+	li = strings.ReplaceAll(li, "{t}", title)
+	li = strings.ReplaceAll(li, "{a}", clean(r["creators"]))
+	if len(strings.TrimSpace(r["date"])) == 0 {
+		li = strings.ReplaceAll(li, "{d}", "")
+	} else {
+		li = strings.ReplaceAll(li, "{d}", "<br>Published "+clean(r["date"]))
+	}
+	if len(strings.TrimSpace(r["tags"])) == 0 {
 		li = strings.ReplaceAll(li, "{tags}", "")
 	} else {
-		li = strings.ReplaceAll(li, "{tags}", "<br>Tags: "+r["tags"])
+		li = strings.ReplaceAll(li, "{tags}", "<br>Tags: "+clean(r["tags"]))
 	}
-	if len(r["pages"]) == 0 {
+	if len(strings.TrimSpace(r["pages"])) == 0 {
 		li = strings.ReplaceAll(li, "{pages}", "")
 	} else {
-		li = strings.ReplaceAll(li, "{pages}", fmt.Sprintf("<br>%s pages", r["pages"]))
+		li = strings.ReplaceAll(li, "{pages}", fmt.Sprintf("<br>%s pages", clean(r["pages"])))
 	}
+	return
+}
+
+// unescape and re-escape string
+func clean(s string) (c string) {
+	c = html.EscapeString(html.UnescapeString(s))
 	return
 }

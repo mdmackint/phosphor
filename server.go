@@ -37,7 +37,7 @@ func main() {
 		log.Fatalf("failed to listen on TCP port %d - are you root? Error:\n%s", port, err.Error())
 	}
 	log.Printf("now listening on TCP %s", l.Addr().String())
-	http.HandleFunc("/api/", api)
+	http.HandleFunc("/dynamic/", api)
 	http.Handle("/", http.FileServerFS(c))
 	http.Serve(l, nil)
 }

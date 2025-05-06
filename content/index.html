@@ -8,9 +8,15 @@
 </head>
 <body>
     <h1 class="it">Phosphor</h1>
-    <label for="enquiry"><p>Search for an item</p></label>
-    <form action="/api/search" method="post">
-        <input type="search" name="enquiry" id="enquiry" placeholder="search by title, author, tag..." aria-placeholder="Book searchbox">
+    <label for="enquiry"><p>Search for an item by its metadata</p></label>
+    <form action="/dynamic/search" method="get">
+        <select name="fields" id="fields">
+            <option value="all">Everything</option>
+            <option value="title">Title</option>
+            <option value="creator">Author</option>
+            <option value="tags">Tags</option>
+        </select>
+        <input type="search" name="enquiry" id="enquiry" placeholder="search your whole catalogue" aria-placeholder="Book searchbox" autocomplete="off">
     </form>
     <div id="history" style="display: none;">
         <i class="centre" id="history-placeholder">Search History</i>
