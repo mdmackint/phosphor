@@ -8,10 +8,12 @@
 </head>
 <body>
     <h1>Search Results</h1>
-    <p>Your query, "<b>{ query }</b>", returned these results:</p>
-    <ul>
+    <p>Your query, "<b>{ query }</b>", took { dur } to process and returned these results:</p>
+    <ul id="results">
         { %%% }
     </ul>
-    <a href="/">Search again</a>
+    <form action="/api/search" method="post">
+        <input type="search" name="enquiry" id="enquiry" placeholder="search again?" aria-placeholder="Book searchbox">
+    </form>
 </body>
 </html>
