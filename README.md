@@ -1,6 +1,6 @@
 # Phosphor
 
-Phosphor is a small, standard-library only web server written in Go for searching through your library catalogue.
+Phosphor is a small web server written in Go with very few dependencies, for searching through your library catalogue.
 
 ## Quick start
 
