@@ -18,15 +18,18 @@ var headers map[string]int
 type result map[string]string
 var catPath *string
 var debug bool
+var portFlag int
 
 func init() {
 	// flags
 	catPath = flag.String("cat","catalogue.csv","specify path to catalogue csv file")
 	cc := flag.Int("cache", 5000, "set maximum cache capacity")
 	d := flag.Bool("debug", false, "show additional debug info")
+	p := flag.Int("port", 8080, "set tcp port to use")
 	if !flag.Parsed() {
 		flag.Parse()
 	}
+	portFlag = *p
 	debug = *d
 	debugPrint("debug logging enabled")
 	cacheCapacity = *cc
