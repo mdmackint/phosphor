@@ -99,16 +99,12 @@ func find(q string, mode int) []result {
 		for _, item := range keywords {
 			switch {
 			case mode == 0 && matchesAny(item, title, authors, tags):
-				debugPrint("mode 0 match")
 				m++
 			case mode == 1 && matches(title, item):
-				debugPrint("mode 1 match")
 				m++
 			case mode == 2 && matches(authors, item):
-				debugPrint("mode 2 match")
 				m++
 			case mode == 3 && matches(tags, item):
-				debugPrint("mode 3 match")
 				m++
 			}
 		}
